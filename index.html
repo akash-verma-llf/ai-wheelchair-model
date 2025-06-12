@@ -67,7 +67,7 @@
         clearTimeout(timeoutID);
         isRecording = false;
 
-        if (confidence > 0.75 && prediction !== "Background Noise") {
+        if (confidence > 0.50 && prediction !== "Background Noise") {
           resultDiv.innerHTML = `✅ Detected: <b>${prediction}</b> (Confidence: ${confidence.toFixed(2)})`;
         } else {
           resultDiv.innerHTML = `❌ No valid command detected (Score: ${confidence.toFixed(2)})`;
