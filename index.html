@@ -2,18 +2,43 @@
 <html>
 <head>
   <title>Voice Command to ESP32</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 40px;
+      background-color: #f0f0f0;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 18px;
+      border-radius: 8px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #result {
+      margin-top: 30px;
+      font-size: 20px;
+      color: #333;
+    }
+  </style>
 </head>
 <body>
-  <div>Teachable Machine Audio Model</div>
-  <button onclick="recordOnce()">🎙️ Record</button>
-  <div id="result"></div>
+  <h1>🎤 Teachable Machine Voice Controller</h1>
+  <button onclick="recordOnce()">🎙️ Record Command</button>
+  <div id="result">Waiting for command...</div>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0"></script>
 
   <script>
     const URL = "https://teachablemachine.withgoogle.com/models/A7x7dP2Bg/";
-    const ESP32_IP = "192.168.4.1"; // Change this to your ESP32's IP
+    const ESP32_IP = "192.168.4.1"; // Change to your ESP32's IP address
     let recognizer;
     let isRecording = false;
 
@@ -26,10 +51,9 @@
 
     async function recordOnce() {
       if (!recognizer) await createModel();
-
-      if (isRecording) return; // prevent spam clicks
+      if (isRecording) return;
       isRecording = true;
-      document.getElementById("result").innerHTML = "Listening... 🎧";
+      document.getElementById("result").innerText = "🎧 Listening...";
 
       recognizer.listen(result => {
         const classLabels = recognizer.wordLabels();
@@ -45,20 +69,18 @@
         }
 
         const command = classLabels[maxIndex];
-        if (maxScore > 0.75) {
+        if (maxScore > 0.75 && command !== "Background Noise") {
           document.getElementById("result").innerHTML = `✅ Detected: <b>${command}</b>`;
           sendToESP32(command);
         } else {
-          document.getElementById("result").innerHTML = "❌ No clear command detected.";
+          document.getElementById("result").innerText = "❌ No clear command detected.";
         }
-
       }, {
         includeSpectrogram: false,
         probabilityThreshold: 0.5,
         overlapFactor: 0.5
       });
 
-      // Stop listening after 1 second
       setTimeout(() => {
         recognizer.stopListening();
         isRecording = false;
@@ -67,8 +89,8 @@
 
     function sendToESP32(command) {
       fetch(`http://${ESP32_IP}/voice?cmd=${command}`)
-        .then(res => console.log("Sent to ESP32:", command))
-        .catch(err => console.error("Error:", err));
+        .then(res => console.log("Sent:", command))
+        .catch(err => console.error("Error sending to ESP32:", err));
     }
   </script>
 </body>
