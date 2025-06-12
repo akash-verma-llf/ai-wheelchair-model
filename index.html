@@ -11,19 +11,6 @@
       padding: 40px;
       background-color: #f7f7f7;
     }
-    button {
-      padding: 12px 24px;
-      font-size: 18px;
-      border-radius: 8px;
-      background-color: #6f42c1;
-      color: white;
-      border: none;
-      cursor: pointer;
-      margin-top: 20px;
-    }
-    button:hover {
-      background-color: #fe566f;
-    }
     #result {
       margin-top: 30px;
       font-size: 20px;
@@ -34,25 +21,25 @@
 <body>
 
   <h1>🎤 Teachable Machine Audio Model</h1>
-  <button onclick="recordOnce()">🎙️ Record</button>
-  <div id="result">Waiting for voice input...</div>
+  <div id="result">Loading model and listening...</div>
 
-  <!-- TensorFlow.js and speech-commands -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0"></script>
 
   <script>
-    const URL = "https://teachablemachine.withgoogle.com/models/A7x7dP2Bg/"; // <-- Your model URL
-    const ESP32_IP = "192.168.4.1"; // <-- Replace with your ESP32 IP
+    const URL = "https://teachablemachine.withgoogle.com/models/A7x7dP2Bg/";
+    const ESP32_IP = "192.168.4.1";
     let recognizer;
-    let isRecording = false;
+    let lastCommand = null;
 
-    // Load the last command on page load (optional)
-    window.onload = function () {
-      const lastCommand = localStorage.getItem("lastCommand");
-      if (lastCommand) {
-        document.getElementById("result").innerHTML = `🔁 Last Command: <b>${lastCommand}</b>`;
+    window.onload = async function () {
+      const savedCommand = localStorage.getItem("lastCommand");
+      if (savedCommand) {
+        document.getElementById("result").innerHTML = `🔁 Last Command: <b>${savedCommand}</b>`;
+        lastCommand = savedCommand;
       }
+      await createModel();
+      startListening();
     };
 
     async function createModel() {
@@ -62,21 +49,13 @@
       await recognizer.ensureModelLoaded();
     }
 
-    async function recordOnce() {
-      if (!recognizer) await createModel();
-      if (isRecording) return;
-      isRecording = true;
-
-      const resultDiv = document.getElementById("result");
-      resultDiv.innerHTML = "🎧 Listening...";
-
-      let timeoutID;
-
+    function startListening() {
       recognizer.listen(result => {
-        const classLabels = recognizer.wordLabels();
+        const labels = recognizer.wordLabels();
         const scores = result.scores;
-        let maxScore = 0;
+
         let maxIndex = 0;
+        let maxScore = 0;
 
         for (let i = 0; i < scores.length; i++) {
           if (scores[i] > maxScore) {
@@ -85,19 +64,15 @@
           }
         }
 
-        recognizer.stopListening();
-        clearTimeout(timeoutID);
-        isRecording = false;
+        const command = labels[maxIndex];
 
-        const command = classLabels[maxIndex];
-        if (maxScore > 0.75 && command !== "Background Noise") {
-          resultDiv.innerHTML = `
-            ✅ Detected Command: <b style="color: green;">${command}</b><br>
-            📡 Command sent to ESP32`;
-          localStorage.setItem("lastCommand", command); // Retain for refresh
+        if (maxScore > 0.75 && command !== "Background Noise" && command !== lastCommand) {
+          lastCommand = command;
+          localStorage.setItem("lastCommand", command);
+          document.getElementById("result").innerHTML = `
+            ✅ New Command: <b style="color: green;">${command}</b><br>
+            📡 Sent to ESP32`;
           sendToESP32(command);
-        } else {
-          resultDiv.innerHTML += `<br>❌ No valid command detected (score: ${maxScore.toFixed(2)})`;
         }
 
       }, {
@@ -105,12 +80,6 @@
         probabilityThreshold: 0.5,
         overlapFactor: 0.5
       });
-
-      timeoutID = setTimeout(() => {
-        recognizer.stopListening();
-        resultDiv.innerHTML += "<br>⏱️ Timed out. Try again.";
-        isRecording = false;
-      }, 2000); // Safety timeout
     }
 
     function sendToESP32(command) {
