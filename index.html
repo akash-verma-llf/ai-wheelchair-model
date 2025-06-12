@@ -1,112 +1,90 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Voice Command to ESP32</title>
+  <meta charset="UTF-8">
+  <title>Teachable Machine Voice Controller</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.3.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/sound@0.8.4"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
       text-align: center;
       padding: 40px;
-      background-color: #f7f7f7;
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 20px;
     }
     button {
       padding: 12px 24px;
-      font-size: 18px;
-      border-radius: 8px;
-      background-color: #007bff;
+      background-color: #004aad;
       color: white;
+      font-size: 16px;
       border: none;
+      border-radius: 8px;
       cursor: pointer;
-      margin-top: 20px;
-    }
-    button:hover {
-      background-color: #0056b3;
     }
     #result {
       margin-top: 30px;
       font-size: 20px;
-      color: #333;
     }
   </style>
 </head>
 <body>
-
-  <h1>🎤 Teachable Machine Audio Model</h1>
-  <button onclick="recordOnce()">🎙️ Record</button>
-  <div id="result">Waiting for voice input...</div>
-
-  <!-- TensorFlow.js and speech-commands -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0"></script>
+  <h1>🎤 Teachable Machine Voice Controller</h1>
+  <button onclick="recordOnce()">🎙️ Record Command</button>
+  <div id="result">Click the button and speak your command.</div>
 
   <script>
-    const URL = "https://teachablemachine.withgoogle.com/models/A7x7dP2Bg/"; // <-- Your model
-    const ESP32_IP = "192.168.4.1"; // <-- Replace with your ESP32 IP
+    const modelURL = "https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/";
     let recognizer;
     let isRecording = false;
 
     async function createModel() {
-      const checkpointURL = URL + "model.json";
-      const metadataURL = URL + "metadata.json";
-      recognizer = speechCommands.create("BROWSER_FFT", undefined, checkpointURL, metadataURL);
+      recognizer = await tmSound.create(modelURL + "model.json");
       await recognizer.ensureModelLoaded();
     }
 
     async function recordOnce() {
       if (!recognizer) await createModel();
       if (isRecording) return;
-      isRecording = true;
 
+      isRecording = true;
       const resultDiv = document.getElementById("result");
-      resultDiv.innerHTML = "🎧 Listening... <span>🎧</span>";
+      resultDiv.innerHTML = "🎧 Listening...";
+
       let timeoutID;
 
       recognizer.listen(result => {
-        const classLabels = recognizer.wordLabels();
+        const labels = recognizer.wordLabels();
         const scores = result.scores;
-        let maxScore = 0;
-        let maxIndex = 0;
-
-        for (let i = 0; i < scores.length; i++) {
-          if (scores[i] > maxScore) {
-            maxScore = scores[i];
-            maxIndex = i;
-          }
-        }
+        let topIndex = scores.indexOf(Math.max(...scores));
+        const prediction = labels[topIndex];
+        const confidence = scores[topIndex];
 
         recognizer.stopListening();
         clearTimeout(timeoutID);
+        isRecording = false;
 
-        const command = classLabels[maxIndex];
-        if (maxScore > 0.75 && command !== "Background Noise") {
-          resultDiv.innerHTML = `✅ Detected: <b>${command}</b><br>📡 Sent to ESP32`;
-          sendToESP32(command);
+        if (confidence > 0.75 && prediction !== "Background Noise") {
+          resultDiv.innerHTML = `✅ Detected: <b>${prediction}</b> (Confidence: ${confidence.toFixed(2)})`;
         } else {
-          resultDiv.innerHTML = `❌ No valid command detected (score: ${maxScore.toFixed(2)})`;
+          resultDiv.innerHTML = `❌ No valid command detected (Score: ${confidence.toFixed(2)})`;
         }
 
-        isRecording = false;
       }, {
-        includeSpectrogram: false,
+        overlapFactor: 0,
         probabilityThreshold: 0.5,
-        overlapFactor: 0.5
+        includeSpectrogram: false
       });
 
       timeoutID = setTimeout(() => {
         recognizer.stopListening();
-        resultDiv.innerHTML = "❌ Timed out. Please try again.";
+        resultDiv.innerHTML = "❌ Timeout. No command detected.";
         isRecording = false;
-      }, 2000); // failsafe in case listen doesn't fire
-    }
-
-    function sendToESP32(command) {
-      fetch(`http://${ESP32_IP}/voice?cmd=${command}`)
-        .then(res => console.log("Sent to ESP32:", command))
-        .catch(err => console.error("ESP32 error:", err));
+      }, 1500);
     }
   </script>
-
 </body>
 </html>
