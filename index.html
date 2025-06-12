@@ -1,67 +1,66 @@
-<div>Teachable Machine Audio Model</div>
-<button type="button" onclick="init()">Start</button>
-<div id="label-container"></div>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Voice Command to ESP32</title>
+</head>
+<body>
+  <div>Teachable Machine Audio Model</div>
+  <button onclick="init()">Start</button>
+  <div id="label-container"></div>
 
-<script type="text/javascript">
-    // more documentation available at
-    // https://github.com/tensorflow/tfjs-models/tree/master/speech-commands
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0"></script>
 
-    // the link to your model provided by Teachable Machine export panel
+  <script>
     const URL = "https://teachablemachine.withgoogle.com/models/A7x7dP2Bg/";
+    const ESP32_IP = "192.168.4.1"; // change to your ESP32's IP
 
     async function createModel() {
-        const checkpointURL = URL + "model.json"; // model topology
-        const metadataURL = URL + "metadata.json"; // model metadata
-
-        const recognizer = speechCommands.create(
-            "BROWSER_FFT", // fourier transform type, not useful to change
-            undefined, // speech commands vocabulary feature, not useful for your models
-            checkpointURL,
-            metadataURL);
-
-        // check that model and metadata are loaded via HTTPS requests.
-        await recognizer.ensureModelLoaded();
-
-        return recognizer;
+      const checkpointURL = URL + "model.json";
+      const metadataURL = URL + "metadata.json";
+      const recognizer = speechCommands.create("BROWSER_FFT", undefined, checkpointURL, metadataURL);
+      await recognizer.ensureModelLoaded();
+      return recognizer;
     }
 
     async function init() {
-        const recognizer = await createModel();
-        const classLabels = recognizer.wordLabels(); // get class labels
-        const labelContainer = document.getElementById("label-container");
-        for (let i = 0; i < classLabels.length; i++) {
-            labelContainer.appendChild(document.createElement("div"));
+      const recognizer = await createModel();
+      const classLabels = recognizer.wordLabels();
+      const labelContainer = document.getElementById("label-container");
+      for (let i = 0; i < classLabels.length; i++) {
+        labelContainer.appendChild(document.createElement("div"));
+      }
+
+      recognizer.listen(result => {
+        const scores = result.scores;
+        let maxScore = 0;
+        let maxIndex = 0;
+
+        for (let i = 0; i < scores.length; i++) {
+          if (scores[i] > maxScore) {
+            maxScore = scores[i];
+            maxIndex = i;
+          }
+          labelContainer.childNodes[i].innerHTML = `${classLabels[i]}: ${scores[i].toFixed(2)}`;
         }
 
-        // listen() takes two arguments:
-        // 1. A callback function that is invoked anytime a word is recognized.
-        // 2. A configuration object with adjustable fields
-        recognizer.listen(result => {
-    const scores = result.scores;
-    let highestScore = 0;
-    let predictedLabel = "";
-
-    for (let i = 0; i < classLabels.length; i++) {
-        const score = result.scores[i];
-        labelContainer.childNodes[i].innerHTML = classLabels[i] + ": " + score.toFixed(2);
-        if (score > highestScore) {
-            highestScore = score;
-            predictedLabel = classLabels[i];
+        if (maxScore > 0.75) {
+          const command = classLabels[maxIndex];
+          console.log("Detected:", command);
+          sendToESP32(command);
         }
+
+      }, {
+        probabilityThreshold: 0.75,
+        overlapFactor: 0.5
+      });
     }
 
-    if (highestScore >= 0.75) {
-        window.AppInventor.setWebViewString(predictedLabel);
+    function sendToESP32(command) {
+      fetch(`http://${ESP32_IP}/voice?cmd=${command}`)
+        .then(response => console.log("Sent to ESP32:", command))
+        .catch(error => console.error("Error sending to ESP32:", error));
     }
-}, {
-    probabilityThreshold: 0.75,
-    overlapFactor: 0.5,
-    invokeCallbackOnNoiseAndUnknown: false
-});
-
-        // Stop the recognition in 5 seconds.
-        // setTimeout(() => recognizer.stopListening(), 5000);
-    }
-</script>
+  </script>
+</body>
+</html>
