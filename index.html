@@ -1,13 +1,15 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Voice Command to ESP32</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       text-align: center;
       padding: 40px;
-      background-color: #f0f0f0;
+      background-color: #f7f7f7;
     }
     button {
       padding: 12px 24px;
@@ -17,6 +19,7 @@
       color: white;
       border: none;
       cursor: pointer;
+      margin-top: 20px;
     }
     button:hover {
       background-color: #0056b3;
@@ -29,16 +32,18 @@
   </style>
 </head>
 <body>
-  <h1>🎤 Teachable Machine Voice Controller</h1>
-  <button onclick="recordOnce()">🎙️ Record Command</button>
-  <div id="result">Waiting for command...</div>
 
+  <h1>🎤 Teachable Machine Audio Model</h1>
+  <button onclick="recordOnce()">🎙️ Record</button>
+  <div id="result">Waiting for voice input...</div>
+
+  <!-- TensorFlow.js and speech-commands -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0"></script>
 
   <script>
-    const URL = "https://teachablemachine.withgoogle.com/models/A7x7dP2Bg/";
-    const ESP32_IP = "192.168.4.1"; // Change to your ESP32's IP address
+    const URL = "https://teachablemachine.withgoogle.com/models/A7x7dP2Bg/"; // <-- Your model
+    const ESP32_IP = "192.168.4.1"; // <-- Replace with your ESP32 IP
     let recognizer;
     let isRecording = false;
 
@@ -53,7 +58,10 @@
       if (!recognizer) await createModel();
       if (isRecording) return;
       isRecording = true;
-      document.getElementById("result").innerText = "🎧 Listening...";
+
+      const resultDiv = document.getElementById("result");
+      resultDiv.innerHTML = "🎧 Listening... <span>🎧</span>";
+      let timeoutID;
 
       recognizer.listen(result => {
         const classLabels = recognizer.wordLabels();
@@ -68,30 +76,37 @@
           }
         }
 
+        recognizer.stopListening();
+        clearTimeout(timeoutID);
+
         const command = classLabels[maxIndex];
         if (maxScore > 0.75 && command !== "Background Noise") {
-          document.getElementById("result").innerHTML = `✅ Detected: <b>${command}</b>`;
+          resultDiv.innerHTML = `✅ Detected: <b>${command}</b><br>📡 Sent to ESP32`;
           sendToESP32(command);
         } else {
-          document.getElementById("result").innerText = "❌ No clear command detected.";
+          resultDiv.innerHTML = `❌ No valid command detected (score: ${maxScore.toFixed(2)})`;
         }
+
+        isRecording = false;
       }, {
         includeSpectrogram: false,
         probabilityThreshold: 0.5,
         overlapFactor: 0.5
       });
 
-      setTimeout(() => {
+      timeoutID = setTimeout(() => {
         recognizer.stopListening();
+        resultDiv.innerHTML = "❌ Timed out. Please try again.";
         isRecording = false;
-      }, 1000);
+      }, 2000); // failsafe in case listen doesn't fire
     }
 
     function sendToESP32(command) {
       fetch(`http://${ESP32_IP}/voice?cmd=${command}`)
-        .then(res => console.log("Sent:", command))
-        .catch(err => console.error("Error sending to ESP32:", err));
+        .then(res => console.log("Sent to ESP32:", command))
+        .catch(err => console.error("ESP32 error:", err));
     }
   </script>
+
 </body>
 </html>
