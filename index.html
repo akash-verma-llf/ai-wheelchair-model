@@ -39,18 +39,27 @@
         // 1. A callback function that is invoked anytime a word is recognized.
         // 2. A configuration object with adjustable fields
         recognizer.listen(result => {
-            const scores = result.scores; // probability of prediction for each class
-            // render the probability scores per class
-            for (let i = 0; i < classLabels.length; i++) {
-                const classPrediction = classLabels[i] + ": " + result.scores[i].toFixed(2);
-                labelContainer.childNodes[i].innerHTML = classPrediction;
-            }
-        }, {
-            includeSpectrogram: true, // in case listen should return result.spectrogram
-            probabilityThreshold: 0.75,
-            invokeCallbackOnNoiseAndUnknown: true,
-            overlapFactor: 0.50 // probably want between 0.5 and 0.75. More info in README
-        });
+    const scores = result.scores;
+    let highestScore = 0;
+    let predictedLabel = "";
+
+    for (let i = 0; i < classLabels.length; i++) {
+        const score = result.scores[i];
+        labelContainer.childNodes[i].innerHTML = classLabels[i] + ": " + score.toFixed(2);
+        if (score > highestScore) {
+            highestScore = score;
+            predictedLabel = classLabels[i];
+        }
+    }
+
+    if (highestScore >= 0.75) {
+        window.AppInventor.setWebViewString(predictedLabel);
+    }
+}, {
+    probabilityThreshold: 0.75,
+    overlapFactor: 0.5,
+    invokeCallbackOnNoiseAndUnknown: false
+});
 
         // Stop the recognition in 5 seconds.
         // setTimeout(() => recognizer.stopListening(), 5000);
